@@ -1,0 +1,51 @@
+# This modelfile was created with the following properties:
+# Basis coordinates: (0, 0), (1, 0)
+# Lattice vectors: a1=(1, 1), a2=(-1, 1)
+# Simulation torus vectors: t1=(1, 3), t2=(-3, 1)
+# Simulation torus matrix: ((2, -1), (1, 2))
+# Symmetry center: (0.5, 0.5)
+# Lattice Point Group: C4
+# Lattice Space Group (infinite Lattice): D4
+# K points (K wedge marked with *): 
+# [1.8849555921538759 -0.6283185307179586] *
+# [0.6283185307179586 1.8849555921538759]
+# [0.0 0.0] *
+# [-0.6283185307179586 -1.8849555921538759]
+# [-1.8849555921538759 0.6283185307179586]
+# High Symmetry Points: None.C1, Gamma.C4, 
+# Eccentricity: --
+#
+[Dimension]=2
+[Sites]=10
+0.0000000000000000 0.0000000000000000
+1.0000000000000000 1.0000000000000000
+1.0000000000000000 0.0000000000000000
+0.0000000000000000 1.0000000000000000
+[Interactions]=8
+CORE1BODY hx 0
+CORE1BODY hx 1
+CORE1BODY hx 2
+CORE1BODY hx 3
+CORE1BODY hz 0
+CORE1BODY hz 1
+CORE1BODY hz 2
+CORE1BODY hz 3
+SymmetryOps=[2]
+# CORE1BODY hy 0
+# CORE1BODY hy 1
+# CORE1BODY hy 2
+# CORE1BODY hy 3
+# CORE4BODY PA 0 1 2 3
+# CORE4BODY PB 0 1 2 3
+# CORE1BODY hx 0
+# CORE1BODY hx 1
+# CORE1BODY hx 2
+# CORE1BODY hx 3
+# CORE1BODY hy 0
+# CORE1BODY hy 1
+# CORE1BODY hy 2
+# CORE1BODY hy 3
+# CORE1BODY hz 0
+# CORE1BODY hz 1
+# CORE1BODY hz 2
+# CORE1BODY hz 3

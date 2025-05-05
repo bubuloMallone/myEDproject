@@ -1,0 +1,9 @@
+# Exclude heavy folders
+OutTime/
+Gs/
+OutCorr/
+OutToric/
+chainFiles/
+OutCorr/
+plots/
+*.log

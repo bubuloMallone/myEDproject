@@ -1,0 +1,5 @@
+#!/bin/csh
+@ Nmax = $1
+foreach n (`seq 0 $Nmax`)
+gawk -f P.awk $Nmax $n > Bosons_${Nmax}.P_${n}
+end

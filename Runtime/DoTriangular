@@ -1,0 +1,56 @@
+#!/bin/csh
+#
+@ thr = 1
+#
+@ Nmax = 2
+@ Ldim = $Nmax + 1
+
+set Nn=12D6
+set Ns=12
+set kset="Gamma.D6.A1 Gamma.D6.A2 Gamma.D6.B1 Gamma.D6.B2 Gamma.D6.E1 Gamma.D6.E2 K.D3.A1 K.D3.A2 K.D3.E M.D2.A1 M.D2.A2 M.D2.B1 M.D2.B2 X.D1.A X.D1.B"
+
+set t=-1
+set V=0
+
+foreach U ( 12 )
+
+foreach r ( $kset )
+
+@ Nm1 = $Ns - 1
+@ Np1 = $Ns + 1
+
+foreach Nb ($Ns $Nm1 $Np1 )
+
+#
+# Make sure the number of bits is large enough to contain the states of the local Hilbert space
+# 
+./EDEngine_2 <<EOFm
+geometry="GeneralLattice";
+sites=$Ns;
+StatesPerSite=$Ldim;
+Nbits=2;
+Sz=0;
+SzFile="Matrix/Bosons_$Nmax.Sz";
+charge=$Nb;
+ChargeFile="Matrix/Bosons_$Nmax.charge";
+representation="$r";
+LatticeDescriptionFile="LatticeFiles/triangular.BoseHubbard.$Nn.lat";
+H1Filename="Matrix/Bosons_$Nmax.U";
+H1Factor=$U;
+H2aFilename="Matrix/Bosons_$Nmax.hop";
+H2aFactor=$t;
+H2bFilename="Matrix/Bosons_$Nmax.nn";
+H2bFactor=$V;
+Nevals=1;
+initthreads=$thr;
+threads=$thr;
+xdumpgs=1;
+energies=1;
+xgsfile="Gs/Bosons_$Nmax.chain.$N.t.1.U.$U.N.$Nb.k.$kgs.gs";
+OutFile="Out/Energies.Bosons_$Nmax.triangular.$Nn.t.$t.U.$U.Nb.$Nb.rep.$r.dat";
+xcheckpointing=1;
+xcheckpointpath="Cp/Bosons_$Nmax.square.$N.t.1.U.$U.N.$Ne.k.0.A";
+xmoduloiters=10;
+EOFm
+end
+end

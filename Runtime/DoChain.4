@@ -1,0 +1,73 @@
+#!/bin/csh
+#
+#
+#   batch job to run an pthread job on 8 processors :
+#
+# @ class = shmem8
+# @ output  = Jobs/job.out.$(jobid)
+# @ error   = Jobs/job.err.$(jobid)
+# @ checkpoint = no
+# @ node_usage = shared
+# @ resources = ConsumableCpus(8)
+# @ queue
+#
+#  run the program
+#
+@ thr = 1
+@ N = 8
+@ stop = $N - 1
+@ Nmax = 2
+@ Ldim = $Nmax + 1
+set kgs="0"
+
+@ Nbits = 1
+@ power = 2  # Start with 2^1
+while ($power < $Ldim)
+    @ Nbits++
+    @ power = $power * 2
+end
+
+foreach kgs (`seq 0 12`)
+
+# Initial value
+set U = 0.8
+# Upper limit
+set max = 6.0
+# Step size
+set step = 0.2
+
+while (`echo "$U <= $max" | bc` == 1)
+# echo "Current U value: $U"
+# Increment U by step
+set U = `echo "$U + $step" | bc`
+foreach kgs (`seq 0 $stop`)
+foreach Ne ($N)
+/Users/pietro/SourceCode/sourcecodeed/ED_Suite/EDEngine_1_clang++ <<EOFm
+geometry="GeneralLattice";
+sites=$N;
+StatesPerSite=$Ldim;
+Nbits=$Nbits;
+Sz=0;
+SzFile="Matrix/Bosons_$Nmax.Sz";
+charge=$Ne;
+ChargeFile="Matrix/Bosons_$Nmax.charge";
+representation="$kgs";
+LatticeDescriptionFile="chain.$N";
+H1Filename="Matrix/Bosons_$Nmax.U";
+H1Factor=$U;
+H2Filename="Matrix/Bosons_$Nmax.hop";
+H2Factor=1;
+Nevecs=1;
+initthreads=$thr;
+threads=$thr;
+dumpgs=1;
+energies=1;
+gsfile="Gs/Bosons_$Nmax.chain.$N.t.1.U.$U.N.$Ne.k.$kgs.gs";
+OutFile="Out/Energies.Bosons_$Nmax.chain.$N.t.1.U.$U.N.$Ne.k.$kgs.dat";
+xcheckpointing=1;
+checkpointpath="Cp/Bosons_$Nmax.square.$N.t.1.U.$U.N.$Ne.k.0.A";
+moduloiters=10;
+EOFm
+end
+end
+end

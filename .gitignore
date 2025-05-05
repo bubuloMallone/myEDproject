@@ -1,0 +1,13 @@
+# Ignore big folders
+EDroutine/plots
+EDroutine/__pycache__
+EDroutine/OutToric
+EDroutine/plots
+plots
+Runtime/__pycache__
+Runtime/Gs
+Runtime/Out*
+Runtime/plots
+RuntimeToric/__pycache__
+RuntimeToric/Out*
+RuntimeToric/plots
