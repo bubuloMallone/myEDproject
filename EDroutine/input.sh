@@ -1,11 +1,25 @@
 #!/bin/bash
 
+# Set the OpenMP flags for this session
+export LDFLAGS="-L/opt/homebrew/opt/libomp/lib"
+export CPPFLAGS="-I/opt/homebrew/opt/libomp/include"
+
 # Simulation parameters
-thr=1
+thr=2
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=$thr
+
+# Display confirmation of OpenMP variables
+echo "OpenMP environment variables:"
+echo "OPENBLAS_NUM_THREADS = $OPENBLAS_NUM_THREADS"
+echo "OMP_NUM_THREADS = $OMP_NUM_THREADS"
+echo "LDFLAGS = $LDFLAGS"
+echo "CPPFLAGS = $CPPFLAGS"
+
 Ns=16
 Ldim=2
-hx_min=0.01
-hx_max=0.01
+hx_min=0.03
+hx_max=0.03
 stepx=0.01
 hx_values=$(seq $hx_min $stepx $hx_max)
 hy=0.00

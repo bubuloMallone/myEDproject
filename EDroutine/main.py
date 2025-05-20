@@ -4,13 +4,29 @@ import line_profiler
 import atexit
 import os
 import numba
+import time
 
 # Import the builder function
-from utils.hamiltonian_utils import build_numba_preprocessed_dict, build_numba_preprocessed_list, build_sparse_hamiltonian
-from utils.input_utils import parse_lattice_file, parse_matrix_file, parse_input_string, parse_tags_factors_matrices, parse_movelist, write_to_file
-from utils.lanczos import lanczos_scipy_serial, lanczos_scipy_parallel, sort_eigenpairs, lanczos_scipy_sparse
-from utils.observable_utils import translation_op, hadamard_op, compute_duality_symmetry
-from utils.debug_utils import check_duality_symmetry_fly, check_duality_symmetry_sparse, print_hamiltonian_terms
+from utils.hamiltonian_utils import (
+    build_numba_preprocessed_dict,
+    build_numba_preprocessed_list,
+    build_sparse_hamiltonian  # <-- newly added parallel builder
+)
+from utils.input_utils import (
+    parse_lattice_file, parse_matrix_file, parse_input_string,
+    parse_tags_factors_matrices, parse_movelist, write_to_file
+)
+from utils.lanczos import (
+    lanczos_scipy_serial, lanczos_scipy_parallel,
+    sort_eigenpairs, lanczos_scipy_sparse, lanczos_primme_sparse
+)
+from utils.observable_utils import (
+    translation_op, hadamard_op, compute_duality_symmetry
+)
+from utils.debug_utils import (
+    check_duality_symmetry_fly, check_duality_symmetry_sparse,
+    print_hamiltonian_terms
+)
 
 # # --- Set up line profiler for performance analysis ---
 # profile = line_profiler.LineProfiler()
@@ -72,18 +88,36 @@ def main():
          print(f"Error setting Numba threads: {e}. Using Numba default.")
     # --- End Numba Threads ---
 
+    # --- Report OMP / BLAS threading setup ---
+    print("OPENBLAS_NUM_THREADS =", os.environ.get("OPENBLAS_NUM_THREADS", "not set"))
+    # OpenMP (used by Numba, PRIMME, etc.)
+    print("OMP_NUM_THREADS =", os.environ.get("OMP_NUM_THREADS", "not set"))
+    # --- End NumPy / BLAS threading setup ---
 
-    if threads == 1: # Serial computation
+    if sparse_method:
+        # ---- Perform Numba preparation of data ----
+        preprocessed_hamiltonian_list = build_numba_preprocessed_list(interactions, matrices, valid_tags, MAX_INT_TYPE)
+        num_processed_terms = len(preprocessed_hamiltonian_list)
+        print(f"Built Numba-friendly interaction list containing {num_processed_terms} terms.")
+        # print_hamiltonian_terms(preprocessed_hamiltonian_dict)
+        # --- End Numba preparation ---
 
-            # ---- Use either "Store_Sparse_Matrix" or "On_the_Fly" method ----
-        if sparse_method:
-            print("Constructing full sparse Hamiltonian")
-            H_sparse = build_sparse_hamiltonian(hilbert_size, interactions, matrices, valid_tags)
-            print("Entering Lanczos computation")
-            # ---- Perform Lanczos computation ----
-            eigenvalues, eigenvectors = lanczos_scipy_sparse(H_sparse, hilbert_size, num_eigenvalues, tolerance=1e-14, maxiter=1000000)
-            print("Lanczos computation finished")
-        else:
+        print("Constructing full sparse Hamiltonian")
+        build_sparse_hamiltonian_start_time = time.time()
+        H_sparse = build_sparse_hamiltonian(hilbert_size, interaction_terms=preprocessed_hamiltonian_list)
+        build_sparse_hamiltonian_end_time = time.time()
+        print("Sparse Hamiltonian construction finished")
+        print(f"Sparse Hamiltonian construction time: {build_sparse_hamiltonian_end_time - build_sparse_hamiltonian_start_time:.3f} seconds")
+        print("Entering Lanczos computation")
+        lanczos_start_time = time.time()
+        # ---- Perform Lanczos computation ----
+        eigenvalues, eigenvectors = lanczos_primme_sparse(H_sparse, hilbert_size, num_eigenvalues, tolerance=1e-12, maxiter=100000)
+        lanczos_end_time = time.time()
+        print("Lanczos computation finished")
+        print(f"Lanczos computation time: {lanczos_end_time - lanczos_start_time:.3f} seconds")
+
+    else:
+        if threads == 1:
             # ---- Perform Numba preparation of data ----
             preprocessed_hamiltonian_dict = build_numba_preprocessed_dict(interactions, matrices, valid_tags)
             print(f"Built Numba-friendly interaction dictionary (keys are interaction types: {list(preprocessed_hamiltonian_dict.keys())})")
@@ -97,21 +131,22 @@ def main():
                                                             num_eigenvalues=num_eigenvalues )
             print("Lanczos computation finished")
 
-    else:  # Parallel computation
-        # ---- Perform Numba preparation of data ----
-        preprocessed_hamiltonian_list = build_numba_preprocessed_list(interactions, matrices, valid_tags, MAX_INT_TYPE)
-        num_processed_terms = len(preprocessed_hamiltonian_list)
-        print(f"Built Numba-friendly interaction list containing {num_processed_terms} terms.")
-        # print_hamiltonian_terms(preprocessed_hamiltonian_dict)
-        # --- End Numba preparation ---
+        else:  # Parallel computation
+            # ---- Perform Numba preparation of data ----
+            preprocessed_hamiltonian_list = build_numba_preprocessed_list(interactions, matrices, valid_tags, MAX_INT_TYPE)
+            num_processed_terms = len(preprocessed_hamiltonian_list)
+            print(f"Built Numba-friendly interaction list containing {num_processed_terms} terms.")
+            # print_hamiltonian_terms(preprocessed_hamiltonian_dict)
+            # --- End Numba preparation ---
 
-        # ---- Lanczos computation ----
-        print("Entering Lanczos computation")
-        eigenvalues, eigenvectors = lanczos_scipy_parallel( hilbert_size=hilbert_size,
-                                                            preprocessed_hamiltonian_list=preprocessed_hamiltonian_list,
-                                                            num_eigenvalues=num_eigenvalues )
-        print("Lanczos computation finished")
-        # --- End Lanczos computation ---
+            # ---- Lanczos computation ----
+            print("Entering Lanczos computation")
+            eigenvalues, eigenvectors = lanczos_scipy_parallel( hilbert_size=hilbert_size,
+                                                                preprocessed_hamiltonian_list=preprocessed_hamiltonian_list,
+                                                                num_eigenvalues=num_eigenvalues )
+            print("Lanczos computation finished")
+            # --- End Lanczos computation ---
+
 
     eigenvalues, eigenvectors = sort_eigenpairs(eigenvalues, eigenvectors)
 

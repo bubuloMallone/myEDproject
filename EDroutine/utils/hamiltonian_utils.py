@@ -7,6 +7,7 @@ from numba import njit, prange
 import line_profiler
 import atexit
 from numba.typed import List
+from scipy.sparse import csr_matrix
 
 # --- Set up line profiler for performance analysis ---
 profile = line_profiler.LineProfiler()
@@ -278,6 +279,7 @@ def _apply_hamiltonian_numba_parallel(
         # --- Loop over ALL terms ---
         for int_term_idx in range(num_total_terms):
             int_term_data = preprocessed_flat_list_csr[int_term_idx]
+            
             (sites_padded_array, 
              int_type, 
              offdiag_offsets, 
@@ -360,39 +362,88 @@ def apply_hamiltonian_parallel(state: np.ndarray,
 
 # -------- Store Hamiltonian matrix in sparse format approach --------
 
-from scipy.sparse import dok_matrix
+@numba.njit(parallel=True)
+def count_nnz_per_row(hilb_size, interaction_terms):
+    nnz_per_row = np.zeros(hilb_size, dtype=np.int32)
+    for j in prange(hilb_size):
+        count = 0
+        for term in interaction_terms:
+            sites, arity, rowptr, colinds, values, diag = term
+            local_state = extract_local_state_padded(j, sites, arity)
+            # Diagonal contribution
+            if diag[local_state] != 0.0:
+                count += 1
+            # Off-diagonal
+            start = rowptr[local_state]
+            end = rowptr[local_state + 1]
+            count += (end - start)
+        nnz_per_row[j] = count
+    return nnz_per_row
 
-def build_sparse_hamiltonian(hilb_size, interactions, matrices, valid_tags):
+@numba.njit()
+def prefix_sum(arr):
+    n = arr.shape[0]
+    result = np.zeros(n + 1, dtype=np.int32)
+    for i in range(n):
+        result[i + 1] = result[i] + arr[i]
+    return result
+
+@numba.njit(parallel=True)
+def fill_sparse_data(hilb_size, interaction_terms, rowptr, colind, data):
+    for j in prange(hilb_size):
+        index = rowptr[j]  # Start index in colind/data for row j
+        for term in interaction_terms:
+            sites, arity, offptrs, colinds_local, vals_local, diag = term
+            local_state = extract_local_state_padded(j, sites, arity)
+
+            # Diagonal
+            val = diag[local_state]
+            if val != 0.0:
+                colind[index] = j
+                data[index] = val
+                index += 1
+
+            # Off-diagonal
+            start = offptrs[local_state]
+            end = offptrs[local_state + 1]
+            for k in range(start, end):
+                local_in = colinds_local[k]
+                global_in = modify_global_state_padded(j, sites, arity, local_in)
+                colind[index] = global_in
+                data[index] = vals_local[k]
+                index += 1
+
+# Wrapper function
+
+def build_sparse_hamiltonian(hilb_size: int, interaction_terms: List):
     """
-    Constructs the sparse Hamiltonian using the interaction terms and pre-parsed matrices.
+    Constructs a CSR-format sparse Hamiltonian using Numba-parallelized assembly.
 
     Parameters:
-    - hilb_size: Hilbert space dimension (2^num_sites).
-    - interactions: Dictionary of interaction terms with site indices and tags.
-    - matrices: Dictionary of {tag: {(local_in, local_out): value}}.
-    - valid_tags: Dictionary of tag metadata (must contain "factor" for each tag).
+        hilb_size : int
+            Hilbert space dimension (2^N).
+        interaction_terms : numba.typed.List
+            Preprocessed flat interaction terms (same structure used in on-the-fly parallel).
 
     Returns:
-    - Hamiltonian in CSR sparse format.
+        scipy.sparse.csr_matrix
+            The sparse Hamiltonian.
     """
-    H = dok_matrix((hilb_size, hilb_size), dtype=np.complex128)
+    # Phase 1: Count NNZ per row
+    nnz_per_row = count_nnz_per_row(hilb_size, interaction_terms)
 
-    for global_in in range(hilb_size):
-        for interaction in interactions.values():
-            tag = interaction["tag"]
-            sites = interaction["sites"]
-            factor = valid_tags[tag]["factor"]
-            matrix = matrices[tag]
+    # Phase 2: Build row pointer
+    rowptr = prefix_sum(nnz_per_row)
+    total_nnz = rowptr[-1]
 
-            local_in = extract_local_state(global_in, sites)
+    # Phase 3: Allocate and fill
+    colind = np.empty(total_nnz, dtype=np.int32)
+    data = np.empty(total_nnz, dtype=np.complex128)
+    fill_sparse_data(hilb_size, interaction_terms, rowptr, colind, data)
 
-            for (lin, lout), value in matrix.items():
-                if lin != local_in:
-                    continue
-                global_out = modify_global_state(global_in, sites, lout)
-                H[global_out, global_in] += factor * value
+    # Wrap in scipy CSR
+    return csr_matrix((data, colind, rowptr), shape=(hilb_size, hilb_size))
 
-    return H.tocsr()
 
 
 

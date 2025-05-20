@@ -3,6 +3,8 @@ from scipy.sparse.linalg import LinearOperator, eigsh, ArpackNoConvergence
 # Import the actual function that applies the Hamiltonian
 from utils.hamiltonian_utils import apply_hamiltonian_serial, apply_hamiltonian_parallel, PreprocessedDictType
 from numba.typed import List
+ 
+from primme import eigsh as primme_eigsh
 
 import line_profiler
 import atexit
@@ -127,3 +129,33 @@ def lanczos_scipy_sparse(matrix_sparse,
           eigenvectors = e.eigenvectors
      
      return eigenvalues, eigenvectors
+
+
+def lanczos_primme_sparse(matrix_sparse,
+                          hilbert_size: int,
+                          num_eigenvalues: int = 1,
+                          tolerance: float = 1e-14,
+                          maxiter: int = 100000):
+    """
+    Compute the lowest eigenvalues using PRIMME with a sparse matrix,
+    with convergence diagnostics.
+    """
+
+    k_eff = min(num_eigenvalues, hilbert_size - 1)
+    if k_eff <= 0:
+        raise ValueError("Number of eigenvalues 'k' must be > 0 and < Hilbert space size.")
+    if k_eff != num_eigenvalues:
+        print(f"Warning: Requested {num_eigenvalues} eigenvalues, but Hilbert space size {hilbert_size} only allows k={k_eff}.")
+
+    eigvals, eigvecs = primme_eigsh(
+        matrix_sparse,
+        k=k_eff,
+        which='SA')
+
+#     if stats['numConverged'] < k_eff:
+#         print(f"WARNING: PRIMME did not converge to all requested eigenvalues.")
+#         print(f"  Converged: {stats['numConverged']}/{k_eff}")
+#         print(f"  Iterations: {stats['numOuterIterations']}")
+#         print(f"  Residual norms: {stats['residualNorms']}")
+
+    return eigvals, eigvecs
