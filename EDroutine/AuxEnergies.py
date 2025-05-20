@@ -174,80 +174,79 @@ def plot_spectrum(df, Ns, type, interval, lattice, energy_cutoff=20, bareGaps=Fa
     plt.show()
 
 
-def plot_TOS(df, selected_U, Nmax, Ns, t, lattice, energy_cutoff=20, save_plot=False):
-    # Ensure selected_U is the correct type, e.g., if 'U' is stored as strings:
-    selected_U = float(selected_U)  # Use float(selected_U) if 'U' is stored as floating points in the DataFrame
+def plot_TOS(df, Ns, type, selected_h, lattice, energy_cutoff=20):
+    # Define marker styles for different 'Rep' values and colors for 'Nb'
+    markers = ['o', 's', '^', 'v', '<', '>', 'p', '*', 'd', 'D', 'P', 'X', 'h', 'H', '8']
+    plt.figure(figsize=(18, 10))
+    if type in ['fix_hx', 'fix_hz']:
+        if not isinstance(selected_h, tuple) or len(selected_h) != 2:
+            raise ValueError("For 'fix_hx' and 'fix_hz', the 'selected_h' parameter must be a tuple with two elements (hx, hz).")
+    elif type == 'dual':
+        if not isinstance(selected_h, tuple) or len(selected_h) != 1:
+            raise ValueError("For 'dual', the 'interval' parameter must be a tuple with exactly 1 element (hx(=hz),).")
+        selected_h = float(selected_h[0])  # Convert to float if it's a single-element tuple 
 
     # Define marker styles for different 'Rep' values and colors for 'Nb'
     # markers = ['o', 's', '^', 'v', '<', '>', '8', 'p', '*', 'd', 'D', 'H', 'h', 'P', 'X']
     # colors = ['red', 'blue', 'green', 'purple', 'darkorange', 'darkcyan', 'magenta', 'lime', 'lightpink', 'saddlebrown', 'gray', 'olive', 'deepskyblue', 'gold', 'black']
-    markers = ['o', 's', '^', 'v', '<', '>', 'p', '*', 'd', 'D', 'P', 'X', 'h', 'H', '8']
-    colors = ['black', 'firebrick', 'g', 'gold', 'b', 'yellow', 'lime', 'r', 'dimgray']
+    # colors = ['black', 'firebrick', 'g', 'gold', 'b', 'yellow', 'lime', 'r', 'dimgray']
+
+    if type == 'fix_hx' or type == 'fix_hz':
+        df_filtered = df[(df['Ns'] == Ns) & (df['hx'] == selected_h[0]) & (df['hz'] == selected_h[2])].copy()
+    elif type == 'dual':
+        df_filtered = df[(df['Ns'] == Ns) & (df['hx'] == selected_h) & (df['hz'] == selected_h)].copy()
+
     legend_handles_dNb = {}  # To store legend handles for dNb
     legend_handles_reps = {}  # To store legend handles for Rep
-
-    df_filtered = df[(df['Ns'] == Ns) & (df['U'] == selected_U)].copy()
-    # Pre-calculate deltaNb and scaled energy for all filtered entries
-    df_filtered['deltaNb'] = df_filtered['Nb'] - df_filtered['Ns']
-    df_filtered['dNb2'] = df_filtered['deltaNb']**2
+    
     df_filtered['scaled_energy'] = df_filtered['Energy'] * np.sqrt(df_filtered['Ns'])
-
-    # Create dictionaries for markers and colors paired with each Rep
-    unique_reps = np.array(sorted(df_filtered['Rep'].unique(), key=Rep_sort_key))
-    unique_dNb = np.sort(df_filtered['deltaNb'].unique())
-    marker_dict = {rep: markers[i % len(markers)] for i, rep in enumerate(unique_reps)}
-    color_dict = {dNb: colors[i % len(colors)] for i, dNb in enumerate(unique_dNb)}
-    # Apply additional filtering on scaled_energy if needed
-    df_filtered = df_filtered[df_filtered['scaled_energy'] <= energy_cutoff]
+    df_filtered = df_filtered[(df_filtered['scaled_energy'] <= energy_cutoff)]
+    df_filtered['color'] = df_filtered['Duality'].apply(duality_color)
+    size = 50
 
     # Debugging output
-    print(f"Filtered DataFrame for U={selected_U} has {len(df_filtered)} rows.")
+    print(f"Filtered DataFrame for U={selected_h} has {len(df_filtered)} rows.")
     if df_filtered.empty:
         print("No data to plot.")
         return
     
-    plt.figure(figsize=(10, 8))
-
     # Group by 'Nb' and 'Rep' and plot for the selected 'U'
-    for (dNb, rep), group in df_filtered.groupby(['deltaNb', 'Rep']):
-        marker = marker_dict[rep]
-        color = color_dict[dNb]
-        if dNb <= 0 : size=100 
-        else: size=200
-        plt.scatter(group['dNb2'], group['Energy'], marker=marker, edgecolors=color, facecolors='none', linewidths=1.5, s=size, label=None)
+    for (duality), group in df_filtered.groupby(['Duality']):
+        
+        plt.scatter(1.0 - group['Duality'], group['Energy'], marker='o', edgecolors=group['color'], facecolors='none', linewidths=1.5, s=size, label=None)
 
-        if rep not in legend_handles_reps:
-                handle_reps = mlines.Line2D([], [], marker=marker, linestyle='None', markeredgecolor='black',
-                                        markerfacecolor='none', markersize=10, label=rep)
-                legend_handles_reps[rep] = handle_reps
-        if dNb not in legend_handles_dNb:
-            handle_dnb = mlines.Line2D([], [], color=color, marker='s', linestyle='None', markeredgecolor=color, 
-                                    markerfacecolor='none', markersize=10, markeredgewidth=2, label=f'ΔNb = {dNb}')
-            legend_handles_dNb[dNb] = handle_dnb
-
-    plt.xlabel(r'$(\Delta N_b)^2$')
+    plt.xlabel('Duality')
     plt.ylabel('Energy')
-    plt.title(f'TOS Analysis for Nmax={Nmax}, Ns={Ns}, t={t}, U={selected_U}')
 
-    # # Adjust the x-axis tick labels to show Nb instead of Nb^2
-    # squared_values = df_filtered['dNb2'].unique()
-    # original_values = df_filtered['deltaNb'].unique()
-    # plt.xticks(squared_values, original_values)  # Set x-ticks to original Nb values
+    if type == 'fix_hx' or type == 'fix_hz':
+        plt.title(f'TOS Analysis for Ns={Ns}, hx={selected_h[0]}, hz={selected_h[1]}')
+    elif type == 'dual':
+        plt.title(f'TOS Analysis for Ns={Ns}, hx=hz={selected_h}')
 
-    # Position the legends on the plot
-    legend_reps = plt.legend(handles=list(legend_handles_reps.values()), title='Representations', loc='upper left', bbox_to_anchor=(1.005, 1))
-    plt.gca().add_artist(legend_reps)
-    plt.legend(handles=list(legend_handles_dNb.values()), title='Particle Number', loc='upper left', bbox_to_anchor=(1.005, 0.4))
+    # Adjust the x-axis tick labels to show Even/Odd instead of +1/-1
+    plt.xticks([0, 2], ['Even', 'Odd'])  # Set x-ticks to Even and Odd
+    plt.xlim(-0.5, 2.5)  # Set x-axis limits to fit the new labels
+
+# Create handles for the Duality legend
+    handle_plus1 = mlines.Line2D([], [], marker='s', linestyle='None', color='blue',
+                                markersize=10, label='-1')
+    handle_minus1 = mlines.Line2D([], [], marker='s', linestyle='None', color='red',
+                                markersize=10, label='+1')
+    handle_other = mlines.Line2D([], [], marker='s', linestyle='None', color='gray',
+                                markersize=10, label='Other')
+    # Add the legend to the plot
+    plt.legend(handles=[handle_plus1, handle_minus1, handle_other], title='Duality', loc='lower left', bbox_to_anchor=(1.005, 0.1))
     plt.grid(True)
-    plt.subplots_adjust(left=0.05, right=0.8, bottom=0.1, top=0.95)
-    
+    plt.subplots_adjust(left=0.05, right=0.85, bottom=0.05, top=0.95)
     # Decide to save the plot as a file or display it
     directory = 'plots'   # Directory path
     resolution = 400
-
     if not os.path.exists(directory): os.makedirs(directory)   # Create the directory if it doesn't exist
-
-    plt.savefig(f'{directory}/{lattice}_TOS_Nmax{Nmax}_Ns{Ns}_t{t}_U{selected_U}_Rep_All.png', dpi = resolution)
+    
+    file_suffix = f"_Ns{Ns}_hx{selected_h[0]}_hz{selected_h[1]}" if type == 'fix_hx' or type == 'fix_hz' else \
+                  f"_Ns{Ns}_hx(hz)_dual"
+    file_prefix = f"{lattice}_TOS"
+    plt.savefig(f'{directory}/{file_prefix}{file_suffix}.png', dpi=resolution)
     plt.show()
 
 
